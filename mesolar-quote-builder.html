@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Me-Solar — Quote Builder</title>
+<style>
+  :root{
+    --ink:#0f172a; --mut:#64748b; --line:#e2e8f0; --bg:#f1f5f9;
+    --brand:#b45309; --brand-dk:#92400e; --ok:#15803d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); font-size:16px;}
+  .wrap{max-width:640px; margin:0 auto; padding:12px 12px 90px;}
+  h1{font-size:1.15rem; margin:10px 2px 2px;}
+  .sub{color:var(--mut); font-size:.8rem; margin:0 2px 12px;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px;}
+  .card h2{font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); margin:0 0 10px;}
+  label{display:block; font-size:.75rem; font-weight:600; color:#334155; margin:8px 0 3px;}
+  input,select,textarea{width:100%; font-size:16px; padding:10px 11px; border:1px solid #cbd5e1; border-radius:9px; background:#fff; color:var(--ink);}
+  textarea{min-height:64px; resize:vertical;}
+  .row{display:flex; gap:8px;} .row>*{flex:1; min-width:0;}
+  .row .sm{flex:0 0 88px;}
+  .items .item{display:flex; gap:6px; align-items:flex-start; margin-bottom:8px;}
+  .items .item .desc{flex:1;}
+  .items .item .qty{flex:0 0 58px;}
+  .items .item .price{flex:0 0 96px;}
+  .items .item .del{flex:0 0 38px; height:42px; border:none; background:#fee2e2; color:#b91c1c; border-radius:9px; font-size:18px; font-weight:700;}
+  .addbtn{width:100%; padding:11px; border:1.5px dashed #cbd5e1; background:#f8fafc; color:#475569; border-radius:10px; font-size:.9rem; font-weight:600;}
+  .tmpl{display:flex; gap:8px; margin-bottom:10px;}
+  .tmpl button{flex:1; padding:10px 6px; border:1px solid var(--line); border-radius:10px; background:#fffbeb; color:var(--brand-dk); font-weight:600; font-size:.8rem;}
+  .totals{font-size:.95rem;}
+  .totals .tr{display:flex; justify-content:space-between; padding:5px 0;}
+  .totals .tr.grand{border-top:2px solid var(--ink); margin-top:6px; padding-top:9px; font-weight:800; font-size:1.15rem;}
+  .totals .neg{color:var(--ok);}
+  .hint{font-size:.72rem; color:var(--mut); margin-top:4px;}
+  .bar{position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--line); padding:10px 12px calc(10px + env(safe-area-inset-bottom)); display:flex; gap:10px; max-width:100%;}
+  .bar button{flex:1; padding:14px; border:none; border-radius:12px; font-size:1rem; font-weight:700;}
+  .primary{background:var(--brand); color:#fff;}
+  .ghost{background:#f1f5f9; color:#334155; border:1px solid var(--line)!important;}
+  /* ---------- Quote document ---------- */
+  #doc{display:none;}
+  body.preview .wrap,body.preview .bar{display:none;}
+  body.preview #doc{display:block;}
+  #doc .page{max-width:760px; margin:0 auto; background:#fff; padding:26px 24px 34px; min-height:100vh;}
+  #doc header{display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid var(--brand); padding-bottom:14px; margin-bottom:16px;}
+  #doc .bizname{font-size:1.3rem; font-weight:800; letter-spacing:.01em;}
+  #doc .bizmeta{font-size:.74rem; color:var(--mut); line-height:1.5; white-space:pre-line;}
+  #doc .qtag{text-align:right;}
+  #doc .qtag .q{font-size:1.4rem; font-weight:800; color:var(--brand);}
+  #doc .qtag .qn{font-size:.8rem; color:var(--mut); line-height:1.6; white-space:pre-line;}
+  #doc h3{font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:18px 0 6px;}
+  #doc .two{display:flex; gap:24px;} #doc .two>*{flex:1;}
+  #doc .block{font-size:.88rem; line-height:1.55; white-space:pre-line;}
+  #doc table{width:100%; border-collapse:collapse; margin-top:4px; font-size:.87rem;}
+  #doc th{text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); border-bottom:1.5px solid var(--ink); padding:6px 4px;}
+  #doc th.r,#doc td.r{text-align:right; white-space:nowrap;}
+  #doc td{padding:7px 4px; border-bottom:1px solid var(--line); vertical-align:top;}
+  #doc .dtot{margin-top:8px; margin-left:auto; width:280px; font-size:.9rem;}
+  #doc .dtot .tr{display:flex; justify-content:space-between; padding:3.5px 4px;}
+  #doc .dtot .grand{border-top:2px solid var(--ink); font-weight:800; font-size:1.05rem; margin-top:4px; padding-top:8px;}
+  #doc .dtot .neg{color:var(--ok);}
+  #doc .accept{margin-top:26px; display:flex; gap:24px;}
+  #doc .accept>div{flex:1; border-top:1px solid var(--ink); padding-top:5px; font-size:.72rem; color:var(--mut);}
+  #doc .foot{margin-top:22px; font-size:.7rem; color:var(--mut); line-height:1.5;}
+  #doc .docbar{position:sticky; top:0; background:var(--ink); color:#fff; padding:10px 12px; display:flex; gap:10px; z-index:5;}
+  #doc .docbar button{flex:1; padding:12px; border:none; border-radius:10px; font-weight:700; font-size:.95rem;}
+  @media print{
+    #doc .docbar{display:none!important;}
+    body{background:#fff;}
+    #doc .page{padding:0; min-height:auto;}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Quote Builder</h1>
+  <p class="sub">Fill in what you need — everything is editable. Nothing is sent anywhere; it all stays on your phone.</p>
+
+  <div class="card">
+    <h2>Your business (shows on the quote)</h2>
+    <label>Business name</label>
+    <input id="bizName" value="Me-Solar Pty Ltd">
+    <label>Business details (ABN, licence, phone, email — one per line)</label>
+    <textarea id="bizMeta">ABN:
+Licence:
+Phone:
+Email: </textarea>
+  </div>
+
+  <div class="card">
+    <h2>Quote details</h2>
+    <div class="row">
+      <div><label>Quote number</label><input id="qNum"></div>
+      <div class="sm"><label>Valid (days)</label><input id="qValid" type="number" value="14" inputmode="numeric"></div>
+    </div>
+    <label>Date</label>
+    <input id="qDate" type="date">
+  </div>
+
+  <div class="card">
+    <h2>Customer</h2>
+    <label>Name</label><input id="cName" autocomplete="off">
+    <label>Site address</label><input id="cAddr" autocomplete="off">
+    <div class="row">
+      <div><label>Phone</label><input id="cPhone" inputmode="tel"></div>
+      <div><label>Email</label><input id="cEmail" inputmode="email"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>System summary (shown at top of quote)</h2>
+    <label>Describe the system</label>
+    <textarea id="sysDesc" placeholder="e.g. 13.5 kWh battery storage system retrofitted to existing 6.6 kW solar, incl. backup circuit for essential loads"></textarea>
+  </div>
+
+  <div class="card items">
+    <h2>Quote items — prices INC GST</h2>
+    <div class="tmpl">
+      <button type="button" onclick="loadTemplate('battery')">Battery template</button>
+      <button type="button" onclick="loadTemplate('solarbat')">Solar + battery template</button>
+    </div>
+    <div id="itemList"></div>
+    <button type="button" class="addbtn" onclick="addItem()">+ Add item</button>
+    <p class="hint">Enter each price as the inc-GST amount. Use the rebate rows below for deductions.</p>
+  </div>
+
+  <div class="card items">
+    <h2>Rebates &amp; discounts (entered as positive, subtracted)</h2>
+    <div id="rebateList"></div>
+    <button type="button" class="addbtn" onclick="addRebate()">+ Add rebate / discount</button>
+    <p class="hint">e.g. federal battery program incentive, STCs if quoting gross, or your own discount. Check current rebate values before quoting — they change.</p>
+  </div>
+
+  <div class="card">
+    <h2>Totals</h2>
+    <div class="totals" id="totBox"></div>
+    <div class="row" style="margin-top:8px">
+      <div class="sm"><label>Deposit %</label><input id="depPct" type="number" value="10" inputmode="numeric"></div>
+      <div><label>&nbsp;</label><div id="depAmt" style="padding:10px 2px;font-weight:700"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Inclusions &amp; notes</h2>
+    <textarea id="qNotes" style="min-height:90px">• Supply and installation by licensed electricians
+• All switchboard works, cabling and isolators as required
+• Grid application and metering coordination
+• Full commissioning, testing and customer handover
+• Certificate of Compliance (electrical work)
+• Workmanship warranty in addition to manufacturer warranties</textarea>
+  </div>
+
+  <div class="card">
+    <h2>Terms</h2>
+    <textarea id="qTerms" style="min-height:70px">Quote valid for the period shown. Price assumes standard single-storey installation with clear access; variations quoted before any extra work. Balance due on completion. Rebate amounts subject to eligibility and current government program rules.</textarea>
+  </div>
+</div>
+
+<div class="bar">
+  <button type="button" class="ghost" onclick="if(confirm('Clear the whole form for a new quote?'))resetForm()">New</button>
+  <button type="button" class="primary" onclick="showDoc()">Preview quote →</button>
+</div>
+
+<!-- ============ QUOTE DOCUMENT ============ -->
+<div id="doc">
+  <div class="docbar">
+    <button style="background:#334155;color:#fff" onclick="hideDoc()">← Edit</button>
+    <button style="background:var(--brand);color:#fff" onclick="window.print()">Save as PDF / Print</button>
+  </div>
+  <div class="page">
+    <header>
+      <div>
+        <div class="bizname" id="dBizName"></div>
+        <div class="bizmeta" id="dBizMeta"></div>
+      </div>
+      <div class="qtag">
+        <div class="q">QUOTE</div>
+        <div class="qn" id="dQMeta"></div>
+      </div>
+    </header>
+
+    <div class="two">
+      <div>
+        <h3>Prepared for</h3>
+        <div class="block" id="dCust"></div>
+      </div>
+      <div>
+        <h3>System</h3>
+        <div class="block" id="dSys"></div>
+      </div>
+    </div>
+
+    <h3>Quote items</h3>
+    <table>
+      <thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit</th><th class="r">Amount</th></tr></thead>
+      <tbody id="dItems"></tbody>
+    </table>
+
+    <div class="dtot" id="dTot"></div>
+
+    <h3>Inclusions</h3>
+    <div class="block" id="dNotes" style="font-size:.8rem"></div>
+
+    <div class="accept">
+      <div>Customer signature</div>
+      <div>Date</div>
+    </div>
+
+    <div class="foot" id="dTerms"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var items=[], rebates=[];
+var $=function(id){return document.getElementById(id);};
+var fmt=function(n){return isFinite(n)?n.toLocaleString("en-AU",{style:"currency",currency:"AUD"}):"$0.00";};
+
+function todayISO(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function defaultQnum(){var d=new Date();return "MES-Q"+d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0")+"-"+String(d.getHours()).padStart(2,"0")+String(d.getMinutes()).padStart(2,"0");}
+
+function addItem(desc,qty,price){
+  items.push({desc:desc||"",qty:qty!=null?qty:1,price:price!=null?price:""});
+  renderItems();
+}
+function addRebate(desc,amt){
+  rebates.push({desc:desc||"",amt:amt!=null?amt:""});
+  renderRebates();
+}
+function renderItems(){
+  var box=$("itemList"); box.innerHTML="";
+  items.forEach(function(it,i){
+    var d=document.createElement("div"); d.className="item";
+    d.innerHTML='<textarea class="desc" rows="2" placeholder="Description">'+esc(it.desc)+'</textarea>'+
+      '<input class="qty" type="number" inputmode="decimal" placeholder="Qty" value="'+esc(it.qty)+'">'+
+      '<input class="price" type="number" inputmode="decimal" placeholder="$ inc" value="'+esc(it.price)+'">'+
+      '<button type="button" class="del">×</button>';
+    d.querySelector(".desc").oninput=function(e){items[i].desc=e.target.value;};
+    d.querySelector(".qty").oninput=function(e){items[i].qty=e.target.value;calc();};
+    d.querySelector(".price").oninput=function(e){items[i].price=e.target.value;calc();};
+    d.querySelector(".del").onclick=function(){items.splice(i,1);renderItems();};
+    box.appendChild(d);
+  });
+  calc();
+}
+function renderRebates(){
+  var box=$("rebateList"); box.innerHTML="";
+  rebates.forEach(function(r,i){
+    var d=document.createElement("div"); d.className="item";
+    d.innerHTML='<textarea class="desc" rows="1" placeholder="e.g. Federal battery program incentive">'+esc(r.desc)+'</textarea>'+
+      '<input class="price" type="number" inputmode="decimal" placeholder="$" value="'+esc(r.amt)+'">'+
+      '<button type="button" class="del">×</button>';
+    d.querySelector(".desc").oninput=function(e){rebates[i].desc=e.target.value;};
+    d.querySelector(".price").oninput=function(e){rebates[i].amt=e.target.value;calc();};
+    d.querySelector(".del").onclick=function(){rebates.splice(i,1);renderRebates();};
+    box.appendChild(d);
+  });
+  calc();
+}
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");}
+
+function nums(){
+  var sub=0;
+  items.forEach(function(it){var q=parseFloat(it.qty)||0,p=parseFloat(it.price)||0;sub+=q*p;});
+  var reb=0;
+  rebates.forEach(function(r){reb+=parseFloat(r.amt)||0;});
+  var total=Math.max(0,sub-reb);
+  var gst=total-total/1.1;
+  var depPct=parseFloat($("depPct").value)||0;
+  return {sub:sub,reb:reb,total:total,gst:gst,dep:total*depPct/100,depPct:depPct};
+}
+function calc(){
+  var n=nums(), h="";
+  h+='<div class="tr"><span>Subtotal (inc GST)</span><span>'+fmt(n.sub)+"</span></div>";
+  if(n.reb>0)h+='<div class="tr neg"><span>Less rebates / discounts</span><span>− '+fmt(n.reb)+"</span></div>";
+  h+='<div class="tr grand"><span>Total (inc GST)</span><span>'+fmt(n.total)+"</span></div>";
+  h+='<div class="tr" style="color:var(--mut);font-size:.8rem"><span>Includes GST</span><span>'+fmt(n.gst)+"</span></div>";
+  $("totBox").innerHTML=h;
+  $("depAmt").textContent="Deposit: "+fmt(n.dep);
+}
+
+function loadTemplate(kind){
+  if(items.length && !confirm("Replace the current items with the template?"))return;
+  items=[];
+  if(kind==="battery"){
+    addItem("Battery — brand / model / kWh",1,"");
+    addItem("Backup / gateway unit (if required)",1,"");
+    addItem("Installation, switchboard works, cabling & isolators",1,"");
+    addItem("Grid application, commissioning & handover",1,"");
+  }else{
+    addItem("Solar panels — brand / model / W (qty = panels)",1,"");
+    addItem("Inverter — brand / model / kW",1,"");
+    addItem("Battery — brand / model / kWh",1,"");
+    addItem("Mounting, rail & roof kit",1,"");
+    addItem("Installation, switchboard works, cabling & isolators",1,"");
+    addItem("Grid application, commissioning & handover",1,"");
+  }
+  if(!rebates.length){addRebate("Government battery program incentive (verify current value)","");addRebate("STC incentive (if applicable)","");}
+}
+
+function showDoc(){
+  var n=nums();
+  $("dBizName").textContent=$("bizName").value||"—";
+  $("dBizMeta").textContent=$("bizMeta").value;
+  var dt=$("qDate").value?new Date($("qDate").value+"T00:00:00"):new Date();
+  var dts=dt.toLocaleDateString("en-AU",{day:"numeric",month:"long",year:"numeric"});
+  var validDays=parseInt($("qValid").value)||14;
+  var exp=new Date(dt.getTime()+validDays*86400000);
+  $("dQMeta").textContent=($("qNum").value||"")+"\n"+dts+"\nValid until "+exp.toLocaleDateString("en-AU",{day:"numeric",month:"long",year:"numeric"});
+  $("dCust").textContent=[$("cName").value,$("cAddr").value,$("cPhone").value,$("cEmail").value].filter(Boolean).join("\n")||"—";
+  $("dSys").textContent=$("sysDesc").value||"—";
+
+  var tb=$("dItems"); tb.innerHTML="";
+  items.forEach(function(it){
+    var q=parseFloat(it.qty)||0,p=parseFloat(it.price)||0;
+    if(!it.desc&&!p)return;
+    var tr=document.createElement("tr");
+    tr.innerHTML="<td>"+esc(it.desc)+'</td><td class="r">'+q+'</td><td class="r">'+fmt(p)+'</td><td class="r">'+fmt(q*p)+"</td>";
+    tb.appendChild(tr);
+  });
+
+  var h='<div class="tr"><span>Subtotal (inc GST)</span><span>'+fmt(n.sub)+"</span></div>";
+  rebates.forEach(function(r){
+    var a=parseFloat(r.amt)||0; if(!a&&!r.desc)return;
+    h+='<div class="tr neg"><span>'+esc(r.desc||"Rebate")+"</span><span>− "+fmt(a)+"</span></div>";
+  });
+  h+='<div class="tr grand"><span>Total (inc GST)</span><span>'+fmt(n.total)+"</span></div>";
+  h+='<div class="tr" style="color:var(--mut)"><span>Includes GST</span><span>'+fmt(n.gst)+"</span></div>";
+  if(n.dep>0)h+='<div class="tr"><span>Deposit to proceed ('+n.depPct+"%)</span><span>"+fmt(n.dep)+"</span></div>";
+  $("dTot").innerHTML=h;
+
+  $("dNotes").textContent=$("qNotes").value;
+  $("dTerms").textContent=$("qTerms").value;
+  document.body.classList.add("preview");
+  window.scrollTo(0,0);
+}
+function hideDoc(){document.body.classList.remove("preview");}
+
+function resetForm(){
+  items=[];rebates=[];renderItems();renderRebates();
+  ["cName","cAddr","cPhone","cEmail","sysDesc"].forEach(function(id){$(id).value="";});
+  $("qNum").value=defaultQnum();
+  $("qDate").value=todayISO();
+  window.scrollTo(0,0);
+}
+
+$("qDate").value=todayISO();
+$("qNum").value=defaultQnum();
+$("depPct").oninput=calc;
+addItem();calc();
+</script>
+</body>
+</html>
