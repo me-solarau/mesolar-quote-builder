@@ -1,0 +1,203 @@
+# PowerShare gateway package.
+#
+# Three jobs:
+#   1. Expose each Shelly's cumulative energy under a stable ps_* entity id.
+#   2. Snapshot every counter on a fixed cadence.
+#   3. Push those snapshots to the ingest API, and shout if that fails.
+#
+# Entity ids are the contract with PowerShare. Once a period has been billed
+# from an entity id, do not rename it.
+
+template:
+  - sensor:
+      # The Pro 3EM reports per phase; the site total is the sum of the three.
+      # Billing uses this one number, so it is derived here rather than in the
+      # app, where a dropped phase could go unnoticed.
+      - name: "PS Master Total Energy"
+        unique_id: ps_master_total_energy
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        state: >
+          {{ (states('sensor.shellypro3em_phase_a_total_active_energy') | float(0)
+            + states('sensor.shellypro3em_phase_b_total_active_energy') | float(0)
+            + states('sensor.shellypro3em_phase_c_total_active_energy') | float(0))
+            | round(3) }}
+        availability: >
+          {{ not is_state('sensor.shellypro3em_phase_a_total_active_energy', 'unavailable')
+             and not is_state('sensor.shellypro3em_phase_b_total_active_energy', 'unavailable')
+             and not is_state('sensor.shellypro3em_phase_c_total_active_energy', 'unavailable') }}
+
+      - name: "PS Master Power"
+        unique_id: ps_master_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ (states('sensor.shellypro3em_phase_a_active_power') | float(0)
+            + states('sensor.shellypro3em_phase_b_active_power') | float(0)
+            + states('sensor.shellypro3em_phase_c_active_power') | float(0))
+            | round(1) }}
+
+      # Live sanity check, mirrored on the app's installer screen: master less
+      # every submeter. On a healthy site this is the main tenant's unmetered
+      # business load and nothing else. A sudden jump means a submeter dropped.
+      - name: "PS Unmetered Residual Power"
+        unique_id: ps_unmetered_residual_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set subs = [
+            'sensor.ps_bed1_gpo_power', 'sensor.ps_bed1_light_power',
+            'sensor.ps_bed2_gpo_power', 'sensor.ps_bed2_light_power',
+            'sensor.ps_armand_gpo_power', 'sensor.ps_armand_light_power',
+            'sensor.ps_armand_ac_power',
+            'sensor.ps_computer_gpo_power', 'sensor.ps_computer_light_power',
+            'sensor.ps_kitchen_gpo_power', 'sensor.ps_kitchen_light_power',
+            'sensor.ps_bathroom_gpo_power', 'sensor.ps_bathroom_light_power',
+            'sensor.ps_laundry_gpo_power', 'sensor.ps_laundry_light_power',
+            'sensor.ps_shared_ac_power', 'sensor.ps_stove_power'
+          ] %}
+          {{ [0, (states('sensor.ps_master_power') | float(0))
+               - (subs | map('states') | map('float', 0) | sum)] | max | round(1) }}
+
+      # How many endpoints are actually reporting.
+      - name: "PS Endpoints Reporting"
+        unique_id: ps_endpoints_reporting
+        state: >
+          {{ states.sensor
+             | selectattr('entity_id', 'search', '^sensor\.ps_.*_energy$')
+             | rejectattr('state', 'in', ['unavailable', 'unknown'])
+             | list | count }}
+
+rest_command:
+  powershare_ingest:
+    url: !secret powershare_ingest_url
+    method: POST
+    headers:
+      authorization: !secret powershare_ingest_token
+      content-type: application/json
+      # The gateway is the only writer for this site, so a per-batch key makes
+      # retries safe: the API upserts on (site, endpoint, read_at).
+      idempotency-key: "{{ batch_id }}"
+    payload: "{{ body }}"
+    timeout: 20
+
+automation:
+  # ---------------------------------------------------------------------
+  # Snapshot and push every 5 minutes.
+  #
+  # Billing only needs the boundary reads, but a 5-minute series gives the
+  # reconciliation code enough resolution to say *when* a meter stopped
+  # reporting, and to estimate what its load was doing at the time.
+  # ---------------------------------------------------------------------
+  - id: powershare_push_readings
+    alias: PowerShare — push meter readings
+    mode: single
+    max_exceeded: silent
+    trigger:
+      - platform: time_pattern
+        minutes: "/5"
+    variables:
+      batch_id: "{{ now().timestamp() | int }}-{{ states('sensor.ps_endpoints_reporting') }}"
+      endpoints:
+        # endpoint_id must match the device id in the PowerShare site model.
+        bed1-gpo: sensor.ps_bed1_gpo
+        bed1-light: sensor.ps_bed1_light
+        bed2-gpo: sensor.ps_bed2_gpo
+        bed2-light: sensor.ps_bed2_light
+        armand-gpo: sensor.ps_armand_gpo
+        armand-light: sensor.ps_armand_light
+        armand-ac: sensor.ps_armand_ac
+        computer-gpo: sensor.ps_computer_gpo
+        computer-light: sensor.ps_computer_light
+        kitchen-gpo: sensor.ps_kitchen_gpo
+        kitchen-light: sensor.ps_kitchen_light
+        bathroom-gpo: sensor.ps_bathroom_gpo
+        bathroom-light: sensor.ps_bathroom_light
+        laundry-gpo: sensor.ps_laundry_gpo
+        laundry-light: sensor.ps_laundry_light
+        shared-ac: sensor.ps_shared_ac
+        stove: sensor.ps_stove
+        master-3em: sensor.ps_master
+      body: >
+        {% set ns = namespace(rows=[]) %}
+        {% for endpoint_id, base in endpoints.items() %}
+          {% set e = base ~ '_energy' %}
+          {% set p = base ~ '_power' %}
+          {% set ns.rows = ns.rows + [{
+            'endpoint_id': endpoint_id,
+            'read_at': now().isoformat(),
+            'cumulative_kwh': states(e) if states(e) not in ['unknown', 'unavailable'] else none,
+            'power_w': states(p) if states(p) not in ['unknown', 'unavailable'] else none,
+            'available': states(e) not in ['unknown', 'unavailable']
+          }] %}
+        {% endfor %}
+        {{ {'site_id': 'site-1', 'gateway': 'ha-green-1',
+            'batch_id': batch_id, 'readings': ns.rows} | tojson }}
+    action:
+      - service: rest_command.powershare_ingest
+        data:
+          batch_id: "{{ batch_id }}"
+          body: "{{ body }}"
+        response_variable: result
+      - choose:
+          - conditions: "{{ result.status is not defined or result.status >= 300 }}"
+            sequence:
+              # The readings are still in the recorder, so nothing is lost — but
+              # somebody has to know the pipe is broken.
+              - service: notify.persistent_notification
+                data:
+                  title: PowerShare ingest failed
+                  message: >
+                    Batch {{ batch_id }} was not accepted
+                    (status {{ result.status | default('no response') }}).
+                    Readings remain in Home Assistant's recorder for replay.
+
+  # ---------------------------------------------------------------------
+  # Boundary reads. The billing calculation subtracts the opening read from
+  # the closing read, so both must be captured at local midnight.
+  # ---------------------------------------------------------------------
+  - id: powershare_boundary_snapshot
+    alias: PowerShare — billing boundary snapshot
+    mode: single
+    trigger:
+      - platform: time
+        at: "00:00:01"
+    action:
+      - service: rest_command.powershare_ingest
+        data:
+          batch_id: "boundary-{{ now().date() }}"
+          body: >
+            {{ {'site_id': 'site-1', 'gateway': 'ha-green-1',
+                'boundary': true, 'read_at': now().isoformat()} | tojson }}
+
+  # ---------------------------------------------------------------------
+  # Local alerting. PowerShare raises its own alerts from the ingested data,
+  # but the gateway sees an outage first and does not need the internet.
+  # ---------------------------------------------------------------------
+  - id: powershare_endpoint_offline
+    alias: PowerShare — endpoint offline
+    mode: queued
+    trigger:
+      - platform: template
+        value_template: >
+          {{ states('sensor.ps_endpoints_reporting') | int(18) < 18 }}
+        for: "00:30:00"
+    action:
+      - service: notify.persistent_notification
+        data:
+          title: PowerShare — a meter has stopped reporting
+          message: >
+            Only {{ states('sensor.ps_endpoints_reporting') }} of 18 endpoints are
+            reporting. Energy through those circuits still passes the master meter
+            and will fall into the main tenant's residual until it is fixed.
+
+# Optional. PowerShare does its own period arithmetic from the raw cumulative
+# counters, which is the auditable path. These exist so the numbers can be
+# sanity-checked inside Home Assistant itself.
+utility_meter:
+  ps_site_monthly:
+    source: sensor.ps_master_total_energy
+    cycle: monthly

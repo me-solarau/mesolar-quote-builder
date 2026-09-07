@@ -1,0 +1,32 @@
+# Add to Home Assistant's configuration.yaml.
+#
+# Everything specific to PowerShare lives in packages/powershare.yaml so it can
+# be dropped in and pulled back out as one unit.
+
+homeassistant:
+  packages: !include_dir_named packages
+
+# The Shelly integration is set up through the UI (Settings → Devices &
+# Services → Shelly) and needs no YAML. Keep the devices local-only: no Shelly
+# Cloud, no device-side MQTT unless you are using the MQTT bridge instead of
+# the REST push.
+
+recorder:
+  # Long-term statistics are what make the cumulative counters survive a
+  # restart. 30 days of fine-grained history is plenty — the billing record
+  # lives in Postgres, not here.
+  purge_keep_days: 30
+  commit_interval: 5
+  include:
+    entity_globs:
+      - sensor.ps_*
+
+logger:
+  default: warning
+  logs:
+    homeassistant.components.shelly: info
+    homeassistant.components.rest_command: info
+
+# Secrets referenced by packages/powershare.yaml, defined in secrets.yaml:
+#   powershare_ingest_url:   https://api.example.com/v1/sites/site-1/readings
+#   powershare_ingest_token: <bearer token issued per gateway>
