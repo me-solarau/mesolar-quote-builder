@@ -1,0 +1,26 @@
+{
+  "name": "powershare",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Tenant energy consumption allocation platform — splits a shared electricity bill using measured consumption.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test src/lib/*.test.js",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^17.12.0",
+    "vite": "^7.1.0"
+  }
+}
