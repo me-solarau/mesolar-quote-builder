@@ -78,7 +78,10 @@ export function CompositionBar ({ segments, total, height = 34 }) {
             <span className="legend-swatch" style={{ background: s.color }} />
             <span style={{ color: 'var(--text-secondary)' }}>{s.label}</span>
             <span className="num" style={{ fontWeight: 600 }}>{pct(s.value / total, 1)}</span>
-            <span className="num" style={{ color: 'var(--text-muted)' }}>{kwh(s.value, 0)} kWh</span>
+            <span className="num" style={{ color: 'var(--text-muted)' }}>
+              {/* Small ranges (a single day) round to nothing at 0 dp. */}
+              {kwh(s.value, total < 100 ? 1 : 0)} kWh
+            </span>
           </div>
         ))}
       </div>

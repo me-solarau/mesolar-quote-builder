@@ -1,19 +1,21 @@
 import { useApp } from '../../lib/useApp.jsx'
-import { TENANTS, MASTER_ID, DEVICE_BY_ID } from '../../data/site.js'
+import { MASTER_ID } from '../../data/site.js'
 import { participantColor, communalColor, PARTICIPANT_ORDER } from '../../lib/palette.js'
-import { kwh, kw, money, pct, signedPct, duration, date } from '../../lib/format.js'
+import { kwh, kw, pct, signedPct, time as timeLabel, dayMonth } from '../../lib/format.js'
 import { dailyStacked, recentPower } from '../../lib/allocation.js'
-import { devicesFor, communalDevices, periodDays, projectToEnd } from '../../lib/views.js'
+import { devicesFor, communalDevices, periodDays, liveElectrical } from '../../lib/views.js'
 import { severityTone } from '../../lib/alerts.js'
-import { Card, Stat, Delta, Notice, Badge, Icon } from '../../components/ui/index.jsx'
+import { Card, Stat, Delta, Notice, Badge } from '../../components/ui/index.jsx'
 import { StackedArea, PowerLine } from '../../components/charts/TimeSeries.jsx'
-import { CompositionBar, BarList, CoverageMeter } from '../../components/charts/Bars.jsx'
+import { CompositionBar, CoverageMeter } from '../../components/charts/Bars.jsx'
 import { useRoute } from '../../lib/useApp.jsx'
+import RangePicker from '../../components/RangePicker.jsx'
 
 export default function OwnerDashboard () {
   const {
     telemetry, allocation, allocations, period, periodId, periods, currentPeriodId,
-    alerts, site, state, nowMs, estimateRate
+    alerts, site, state, nowMs, earliestMs,
+    rangeAllocation, range, rangeMode, setRangeMode, customRange, setCustomRange
   } = useApp()
   const [, navigate] = useRoute()
 
@@ -25,9 +27,9 @@ export default function OwnerDashboard () {
   const last = telemetry.hours.length - 1
   const liveMaster = telemetry.series[MASTER_ID].kw[last]
   const power = recentPower(telemetry, MASTER_ID, 48)
+  const electrical = liveElectrical(telemetry)
 
   const { elapsed, total } = periodDays(period, nowMs)
-  const projected = isOpen ? projectToEnd(rec.masterKwh, period, nowMs) : null
 
   const masterDelta = prev && prev.reconciliation.masterKwh > 0 && !isOpen
     ? (rec.masterKwh - prev.reconciliation.masterKwh) / prev.reconciliation.masterKwh
@@ -42,7 +44,12 @@ export default function OwnerDashboard () {
     { key: 'communal', deviceIds: communalDevices(state.assignments).map((d) => d.id) },
     { key: 'main', deviceIds: devicesFor('main', state.assignments).map((d) => d.id), residual: true }
   ]
-  const daily = dailyStacked(telemetry, groups, allocation.i0, allocation.i1)
+  // Only this chart follows the range control — the reconciliation figures
+  // above it are billing-period quantities and must stay that way.
+  const hourly = range.granularity === 'hour'
+  const daily = dailyStacked(
+    telemetry, groups, rangeAllocation.i0, rangeAllocation.i1, hourly ? 1 : 24
+  )
   const stackSeries = [
     { key: 'bed1', label: 'Bedroom 1', color: participantColor('bed1') },
     { key: 'bed2', label: 'Bedroom 2', color: participantColor('bed2') },
@@ -73,7 +80,7 @@ export default function OwnerDashboard () {
         </Card>
         <Card>
           <Stat label="Live demand" value={kw(liveMaster, 2)} unit=" kW"
-            sub={`${(liveMaster * 1000 / (3 * 230)).toFixed(1)} A avg per phase`} />
+            sub={`peak phase ${electrical.maxAmps.toFixed(1)} A of ${electrical.supplyRatingA} A`} />
         </Card>
         <Card>
           <Stat label="Attributed to meters" value={pct(rec.meteredKwh / Math.max(1e-9, rec.masterKwh))}
@@ -111,12 +118,41 @@ export default function OwnerDashboard () {
 
         <Card title="Live site demand" subtitle={`Master meter, last 48 hours. Now: ${kw(liveMaster)} kW`}>
           <PowerLine data={power} color={participantColor('main')} height={150} label="Site demand" />
+          <div style={{ marginTop: 14, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+            <div className="stat-label" style={{ marginBottom: 8 }}>Per phase, right now</div>
+            <table className="data" style={{ fontSize: 12.5 }}>
+              <tbody>
+                {electrical.phases.map((ph) => (
+                  <tr key={ph.phase}>
+                    <td style={{ padding: '5px 0' }}>{ph.phase}</td>
+                    <td className="n" style={{ padding: '5px 0' }}>{ph.volts.toFixed(1)} V</td>
+                    <td className="n" style={{ padding: '5px 0' }}>{ph.amps.toFixed(1)} A</td>
+                    <td className="n" style={{ padding: '5px 0' }}>{kw(ph.kw)} kW</td>
+                    <td style={{ padding: '5px 0 5px 10px', width: 70 }}>
+                      <CoverageMeter value={ph.amps / electrical.supplyRatingA} threshold={0.8} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8 }}>
+              Bars show load against the {electrical.supplyRatingA} A per-phase rating; the
+              mark is 80%. Phase imbalance {pct(electrical.imbalance, 0)}.
+            </div>
+          </div>
         </Card>
       </div>
 
-      <Card title="Daily energy by participant"
-        subtitle="Direct metered usage per participant, the communal pool, and the main tenant's residual — stacking to the master read.">
-        <StackedArea data={daily} series={stackSeries} height={250} />
+      <Card
+        title={hourly ? 'Hourly energy by participant' : 'Daily energy by participant'}
+        subtitle={`${range.label} — direct metered usage per participant, the communal pool, and the main tenant's residual, stacking to the master read.`}
+        action={
+          <RangePicker mode={rangeMode} onMode={setRangeMode}
+            custom={customRange} onCustom={setCustomRange}
+            nowMs={nowMs} earliestMs={earliestMs} />
+        }>
+        <StackedArea data={daily} series={stackSeries} height={250}
+          xLabel={hourly ? timeLabel : dayMonth} />
         <div className="legend" style={{ marginTop: 12 }}>
           {stackSeries.map((s) => (
             <span className="legend-item" key={s.key}>

@@ -1,20 +1,21 @@
 import { useState, useMemo } from 'react'
 
 import { useApp } from '../../lib/useApp.jsx'
-import { DEVICES, DEVICE_BY_ID, MASTER_ID, TENANTS, AREA_BY_ID, LOAD_TYPES } from '../../data/site.js'
+import { DEVICES, MASTER_ID, TENANTS, AREA_BY_ID } from '../../data/site.js'
 import { participantColor, communalColor, loadTypeColor } from '../../lib/palette.js'
-import { kwh, kw, pct, duration, ago, dateTime } from '../../lib/format.js'
+import { kwh, kw, pct, ago } from '../../lib/format.js'
 import { severityTone } from '../../lib/alerts.js'
 import {
   Card, Badge, Icon, Notice, Modal, Field, Segmented, LOAD_ICON, Empty
 } from '../../components/ui/index.jsx'
 import { Sparkline } from '../../components/charts/TimeSeries.jsx'
+import { liveElectrical } from '../../lib/views.js'
 import { CoverageMeter } from '../../components/charts/Bars.jsx'
 
 const ASSIGNMENT_OPTIONS = [
   ...TENANTS.map((t) => ({ value: `tenant:${t.id}`, label: `${t.name} (private)` })),
   { value: 'communal', label: 'Communal — split between all participants' },
-  { value: 'master', label: 'Master metering — reconciliation reference only' }
+  { value: 'master', label: 'Master metering — reference only, not billed' }
 ]
 
 export function assignmentLabel (assignment) {
@@ -34,6 +35,7 @@ export default function OwnerDevices () {
 
   const last = telemetry.hours.length - 1
   const readOnly = session.role !== 'owner'
+  const electrical = useMemo(() => liveElectrical(telemetry), [telemetry])
 
   const rows = useMemo(() => {
     return DEVICES.map((dv) => {
@@ -51,14 +53,14 @@ export default function OwnerDevices () {
         dv,
         alloc,
         online,
-        lastSeenMs: telemetry.hours[lastSeen],
+        lastSeenMs: Math.min(nowMs, telemetry.hours[lastSeen] + 3600_000),
         liveKw: online ? s.kw[last] : null,
         cum: s.cum[last],
         spark,
         assignment: state.assignments[dv.id] ?? dv.assignment
       }
     })
-  }, [telemetry, allocation, state.assignments, last])
+  }, [telemetry, allocation, state.assignments, last, nowMs])
 
   const filtered = rows.filter((r) => {
     if (filter === 'all') return true
@@ -103,8 +105,9 @@ export default function OwnerDevices () {
                   <tr>
                     <th>Meter</th>
                     <th>Assignment</th>
-                    <th>State</th>
+                    <th>Last reading</th>
                     <th className="n">Now</th>
+                    <th className="n">V / A</th>
                     <th>48 h</th>
                     <th className="n">Period kWh</th>
                     <th className="n">Coverage</th>
@@ -133,13 +136,24 @@ export default function OwnerDevices () {
                       </td>
                       <td>
                         {r.online
-                          ? <Badge tone="good" icon="wifi">Online</Badge>
+                          ? <Badge tone="good" icon="wifi">{ago(r.lastSeenMs, nowMs)}</Badge>
                           : <Badge tone="bad" icon="wifiOff">{ago(r.lastSeenMs, nowMs)}</Badge>}
                         {r.alloc.corrections.length > 0 && (
                           <span style={{ marginLeft: 6 }}><Badge tone="warn" icon="alert">Reset</Badge></span>
                         )}
                       </td>
                       <td className="n">{r.liveKw == null ? '—' : `${kw(r.liveKw)} kW`}</td>
+                      <td className="n" style={{ color: 'var(--text-secondary)' }}>
+                        {r.dv.id === MASTER_ID
+                          ? `${electrical.phases.map((p) => p.amps.toFixed(1)).join(' / ')} A`
+                          : electrical.devices[r.dv.id]?.online
+                            ? <>
+                                {electrical.devices[r.dv.id].volts.toFixed(1)} V
+                                <span style={{ color: 'var(--text-muted)' }}> · </span>
+                                {electrical.devices[r.dv.id].amps.toFixed(2)} A
+                              </>
+                            : '—'}
+                      </td>
                       <td>
                         <Sparkline values={r.spark} color={loadTypeColor(r.dv.loadType)} />
                       </td>
@@ -215,7 +229,7 @@ function AssignModal ({ row, onClose, onSave }) {
         <Field label="Billed to"
           hint="Changing this recalculates every open period immediately. Statements already issued keep the assignment they were issued under.">
           <select value={value} onChange={(e) => setValue(e.target.value)}>
-            {ASSIGNMENT_OPTIONS.filter((o) => o.value !== 'master').map((o) => (
+            {ASSIGNMENT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
@@ -227,7 +241,17 @@ function AssignModal ({ row, onClose, onSave }) {
           {row.dv.note && <div style={{ marginTop: 6, color: 'var(--text-muted)' }}>{row.dv.note}</div>}
         </div>
 
-        {changed && (
+        {changed && value === 'master' && (
+          <Notice tone="warn" icon="alert">
+            Marking this endpoint <strong>reference only</strong> removes its
+            {' '}{kwh(row.alloc.kwh, 1)} kWh from every participant’s bill. Because the
+            energy still passes the master meter, it moves straight into the main
+            tenant’s residual. Use this for a check meter measuring a circuit that
+            is already counted elsewhere — never to exclude a real load.
+          </Notice>
+        )}
+
+        {changed && value !== 'master' && (
           <Notice tone="warn" icon="alert">
             This moves {kwh(row.alloc.kwh, 1)} kWh out of{' '}
             <strong>{assignmentLabel(row.assignment).replace(/ \(private\)| — .*/, '')}</strong> and into{' '}

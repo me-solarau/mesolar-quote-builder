@@ -1,7 +1,6 @@
 import { useApp } from '../../lib/useApp.jsx'
-import { TENANT_BY_ID } from '../../data/site.js'
 import { participantColor } from '../../lib/palette.js'
-import { kwh, money, pct, date } from '../../lib/format.js'
+import { kwh, money, pct } from '../../lib/format.js'
 import { periodDays, projectToEnd } from '../../lib/views.js'
 import { buildSnapshot } from '../../lib/statement.js'
 import { Card, Stat, Notice, Badge, Empty } from '../../components/ui/index.jsx'

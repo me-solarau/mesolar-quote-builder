@@ -290,11 +290,11 @@ export function dailySeries (telemetry, deviceId, i0, i1) {
 }
 
 /** Daily kWh summed over a set of devices, plus an optional residual line. */
-export function dailyStacked (telemetry, groups, i0, i1) {
+export function dailyStacked (telemetry, groups, i0, i1, stepHours = 24) {
   const { hours } = telemetry
   const days = []
-  for (let i = i0; i < i1; i += 24) {
-    const j = Math.min(i1, i + 24)
+  for (let i = i0; i < i1; i += stepHours) {
+    const j = Math.min(i1, i + stepHours)
     const row = { t: hours[i] }
     for (const g of groups) {
       let sum = 0

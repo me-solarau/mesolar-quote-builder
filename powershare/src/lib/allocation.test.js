@@ -128,3 +128,35 @@ test('deviceDelta and energyAtRisk agree on a clean series', () => {
   assert.equal(d.coverage, 1)
   assert.equal(energyAtRisk(clean, 0, 100).kwh, 0)
 })
+
+/* ------------------------------------------------------------------ */
+/* Permission boundary                                                  */
+/* ------------------------------------------------------------------ */
+
+test('a tenant projection exposes their own row and no other participant', async () => {
+  const { visibleTo, canRead } = await import('./views.js')
+  const r = run()
+  const view = visibleTo({ role: 'tenant', tenantId: 'bed1' }, r)
+
+  assert.equal(view.scope, 'tenant')
+  assert.equal(view.tenantId, 'bed1')
+  assert.equal(view.own.tenantId, 'bed1')
+  assert.equal(view.perTenant, undefined, 'the full per-participant map is not exposed')
+
+  const ids = view.devices.map((d) => d.deviceId)
+  assert.ok(ids.includes('bed1-gpo'), 'their own endpoints are visible')
+  assert.ok(ids.includes('kitchen-gpo'), 'communal endpoints they are charged for are visible')
+  assert.ok(!ids.includes('bed2-gpo'), 'another tenant’s endpoint is not')
+  assert.ok(!ids.includes('armand-ac'), 'nor another tenant’s private air conditioner')
+
+  assert.equal(canRead({ role: 'tenant', tenantId: 'bed1' }, 'bed1'), true)
+  assert.equal(canRead({ role: 'tenant', tenantId: 'bed1' }, 'bed2'), false)
+  assert.equal(canRead({ role: 'owner' }, 'bed2'), true)
+})
+
+test('the owner projection is the whole site', async () => {
+  const { visibleTo } = await import('./views.js')
+  const view = visibleTo({ role: 'owner' }, run())
+  assert.equal(view.scope, 'site')
+  assert.equal(Object.keys(view.allocation.perTenant).length, 4)
+})

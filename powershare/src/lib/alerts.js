@@ -9,7 +9,7 @@
 import { DEVICE_BY_ID, TENANT_BY_ID } from '../data/site.js'
 import { duration, kwh } from './format.js'
 
-export function buildAlerts ({ allocation, telemetry, site, nowMs }) {
+export function buildAlerts ({ allocation, telemetry, site }) {
   const alerts = []
   const { reconciliation, devices } = allocation
 
@@ -20,7 +20,9 @@ export function buildAlerts ({ allocation, telemetry, site, nowMs }) {
     const offline = !s.ok[allocation.i1]
 
     if (offline) {
-      const downHours = (allocation.i1 - lastOkIndex)
+      // Hours since the end of the last good bucket, matching the "last
+      // reading" figure the device tables show.
+      const downHours = allocation.i1 - lastOkIndex
       const severity = row.atRiskKwh > 10 ? 'critical' : 'warning'
       alerts.push({
         id: `offline:${row.deviceId}`,
@@ -113,15 +115,18 @@ export function buildAlerts ({ allocation, telemetry, site, nowMs }) {
   }
 
   if (reconciliation.billKwhVariance != null && Math.abs(reconciliation.billKwhVariance) > 0.02) {
+    // billKwhVariance is a fraction of the retailer's figure, so recover the
+    // retailer's kWh from it rather than printing the fraction as an energy.
+    const retailerKwh = reconciliation.masterKwh / (1 + reconciliation.billKwhVariance)
     alerts.push({
       id: 'bill-variance',
       severity: 'warning',
       kind: 'reconciliation',
       title: 'Master read disagrees with the retailer bill',
       body: `The master meter recorded ${kwh(reconciliation.masterKwh, 0)} kWh against ` +
-        `the retailer’s ${kwh(reconciliation.billKwhVariance, 0)} kWh — a variance of ` +
+        `the retailer’s ${kwh(retailerKwh, 0)} kWh — a variance of ` +
         `${(reconciliation.billKwhVariance * 100).toFixed(1)}%.`,
-      action: 'Check the bill period dates match the meter period exactly.'
+      action: 'Check the bill period dates match the metering period exactly.'
     })
   }
 

@@ -10,7 +10,7 @@ const PAD = { top: 10, right: 12, bottom: 26, left: 46 }
  * adjacency), with a 2px surface gap between segments so neighbouring fills
  * never touch.
  */
-export function StackedArea ({ data, series, height = 220, unit = 'kWh', xLabel = dayMonth }) {
+export function StackedArea ({ data, series, height = 220, unit = 'kWh', xLabel = dayMonth, tipLabel }) {
   useThemeTick()
   const [ref, width] = useMeasure()
   const c = chromeColors()
@@ -85,7 +85,7 @@ export function StackedArea ({ data, series, height = 220, unit = 'kWh', xLabel 
       </svg>
       {hover != null && stacks[hover.i] && (
         <Tooltip x={hover.px} y={hover.py} width={width}>
-          <div className="t-title">{dayMonth(stacks[hover.i].t)}</div>
+          <div className="t-title">{(tipLabel ?? xLabel)(stacks[hover.i].t)}</div>
           {[...stacks[hover.i].segs].reverse().map((seg) => (
             <div className="t-row" key={seg.key}>
               <span className="sw" style={{ background: series.find((s) => s.key === seg.key).color }} />

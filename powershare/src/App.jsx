@@ -51,7 +51,7 @@ function navFor (role) {
 }
 
 function Shell () {
-  const { session, alerts, periods, periodId, setPeriodId, currentPeriodId } = useApp()
+  const { session, liveAlerts, periods, periodId, setPeriodId, currentPeriodId } = useApp()
   const [route, navigate] = useRoute()
   const nav = navFor(session.role)
   const active = nav.find((n) => n.key === route) ?? nav[0]
@@ -60,7 +60,7 @@ function Shell () {
     if (!nav.some((n) => n.key === route)) navigate(nav[0].key)
   }, [route, nav, navigate])
 
-  const openAlerts = alerts.filter((a) => a.severity !== 'info').length
+  const openAlerts = liveAlerts.filter((a) => a.severity !== 'info').length
   const Screen = active.Screen
 
   return (

@@ -37,6 +37,7 @@ function seedState () {
     bills: RETAILER_BILLS,
     statements: ISSUED_STATEMENTS.map((s) => ({ ...s, snapshot: null })),
     overrides: [],            // {periodId, reason, byMs, by}
+    addedDevices: [],         // meters onboarded in-app, awaiting first reading
     audit: SEED_AUDIT.map((e, i) => ({ id: `seed-${i}`, ...e }))
   }
 }
@@ -120,6 +121,39 @@ export function setAssignment (device, assignment, actor, label) {
   )
 }
 
+/**
+ * Onboard a meter (FR-01).
+ *
+ * A newly added meter carries no history and contributes nothing to any
+ * allocation until it reports — which is exactly how a real commissioning
+ * works. It appears in the device list as "awaiting first reading" so the
+ * installer can see it was accepted, and it is billed from the first period in
+ * which it actually produces cumulative energy.
+ */
+export function addDevice (device, actor) {
+  const record = {
+    ...device,
+    id: device.id || `dev-${Date.now().toString(36)}`,
+    addedAtMs: Date.now(),
+    pending: true
+  }
+  set({ addedDevices: [...state.addedDevices, record] })
+  logAudit(actor, 'device.onboarded',
+    `Onboarded ${record.name} at ${record.ip}.`,
+    `${record.model} · ${record.loadType} · assigned to ${record.assignment}. ` +
+      'No cumulative energy recorded yet; the endpoint contributes nothing to ' +
+      'an allocation until it reports.')
+  return record
+}
+
+export function removeDevice (id, actor) {
+  const dv = state.addedDevices.find((d) => d.id === id)
+  if (!dv) return
+  set({ addedDevices: state.addedDevices.filter((d) => d.id !== id) })
+  logAudit(actor, 'device.removed', `Removed ${dv.name} before it reported.`,
+    'The endpoint had no energy history, so no allocation is affected.')
+}
+
 /* ------------------------------------------------------------------ */
 /* Communal split rules (FR-09)                                        */
 /* ------------------------------------------------------------------ */
@@ -196,6 +230,23 @@ export function issueStatement (periodId, snapshot, actor, note = '') {
     `$${snapshot.distributable.toFixed(2)} · ${snapshot.rows.length} participants. ` +
     (note ? `Note: ${note}` : 'Figures frozen at issue.'))
   return record
+}
+
+/**
+ * Seeded statements ship without a snapshot because the figures depend on
+ * telemetry that only exists once the app is running. Backfilling on first
+ * load means the immutability guarantee — an issued statement never restates
+ * itself — holds for the historical statements too, not just new ones.
+ */
+export function backfillSnapshot (periodId, snapshot) {
+  const existing = state.statements.find((s) => s.periodId === periodId)
+  if (!existing || existing.snapshot) return false
+  set({
+    statements: state.statements.map((s) =>
+      s.periodId === periodId ? { ...s, snapshot, backfilled: true } : s
+    )
+  })
+  return true
 }
 
 export function overrideFor (periodId) {

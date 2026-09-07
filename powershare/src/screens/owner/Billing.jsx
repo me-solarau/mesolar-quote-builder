@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { useApp } from '../../lib/useApp.jsx'
 import { TENANTS } from '../../data/site.js'
-import { participantColor, communalColor } from '../../lib/palette.js'
+import { participantColor } from '../../lib/palette.js'
 import { kwh, money, pct, signedPct, date, fullDateTime } from '../../lib/format.js'
 import { buildSnapshot } from '../../lib/statement.js'
 import {
@@ -266,7 +266,7 @@ function BillModal ({ period, bill, masterKwh, onClose, onSave }) {
           <input type="text" value={form.invoiceNo} onChange={(e) => set('invoiceNo', e.target.value)} />
         </Field>
         <Field label="Bill period start"
-          hint="Must match the metering period exactly, or the reconciliation will drift.">
+          hint="Recorded on the statement. Meter reads are always taken at the billing-period boundaries above, so a mismatch here means the invoice covers different dates than the energy it is being spread over.">
           <input type="date" value={toDateInput(form.startMs)}
             onChange={(e) => set('startMs', fromDateInput(e.target.value))} />
         </Field>
@@ -304,7 +304,15 @@ function BillModal ({ period, bill, masterKwh, onClose, onSave }) {
         </Field>
       </div>
 
-      <div style={{ marginTop: 14 }}>
+      <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
+        {(form.startMs !== period.startMs || form.endMs !== period.endMs) && (
+          <Notice tone="warn" icon="alert" title="Bill dates do not match the metering period">
+            This invoice is dated {date(form.startMs)} – {date(form.endMs)}, but the
+            allocation reads the meters at {date(period.startMs)} – {date(period.endMs)}.
+            The energy split will not correspond to the invoice. Either correct the
+            dates, or ask the retailer for a bill aligned to the metering period.
+          </Notice>
+        )}
         {form.totalKwh > 0 && (
           <Notice tone={Math.abs(variance) > 0.02 ? 'warn' : 'good'}
             icon={Math.abs(variance) > 0.02 ? 'alert' : 'check'}>

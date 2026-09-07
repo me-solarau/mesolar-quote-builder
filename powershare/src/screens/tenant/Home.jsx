@@ -6,14 +6,14 @@ import {
   devicesFor, liveKw, liveResidualKw, participantPower, participantDaily,
   periodDays, projectToEnd, deviceRowsFor
 } from '../../lib/views.js'
-import { Card, Stat, Delta, Notice, Badge, Icon, LOAD_ICON } from '../../components/ui/index.jsx'
+import { Card, Delta, Notice, Badge } from '../../components/ui/index.jsx'
 import { PowerLine, StackedArea } from '../../components/charts/TimeSeries.jsx'
 import { CompositionBar, BarList } from '../../components/charts/Bars.jsx'
 
 export default function TenantHome () {
   const {
     session, telemetry, allocation, allocations, periods, period, periodId,
-    state, splitRule, nowMs, estimateRate, currentPeriodId, alerts
+    state, nowMs, estimateRate, currentPeriodId, alerts
   } = useApp()
 
   const tid = session.tenantId

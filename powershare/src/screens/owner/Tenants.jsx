@@ -1,19 +1,18 @@
 import { useState } from 'react'
 
-import { useApp, useRoute } from '../../lib/useApp.jsx'
-import { TENANTS, TENANT_BY_ID } from '../../data/site.js'
+import { useApp } from '../../lib/useApp.jsx'
+import { TENANTS } from '../../data/site.js'
 import { participantColor, communalColor } from '../../lib/palette.js'
 import { kwh, money, pct } from '../../lib/format.js'
 import { deviceRowsFor, participantDaily } from '../../lib/views.js'
-import { Card, Stat, Delta, Badge, Avatar, Icon, Segmented, Notice, LOAD_ICON } from '../../components/ui/index.jsx'
+import { Card, Stat, Delta, Badge, Avatar, Segmented, Notice } from '../../components/ui/index.jsx'
 import { BarList, GroupedBars } from '../../components/charts/Bars.jsx'
 import { StackedArea } from '../../components/charts/TimeSeries.jsx'
-import { ChartTable } from '../../components/charts/primitives.jsx'
 
 export default function OwnerTenants () {
   const {
-    telemetry, allocation, allocations, periods, period, periodId, currentPeriodId,
-    state, splitRule, estimateRate
+    allocation, allocations, periods, periodId, currentPeriodId,
+    splitRule, estimateRate
   } = useApp()
   const [selected, setSelected] = useState(null)
   const [view, setView] = useState('chart')
@@ -161,7 +160,7 @@ export default function OwnerTenants () {
 }
 
 function TenantDetail ({ row }) {
-  const { telemetry, allocation, state, period } = useApp()
+  const { telemetry, allocation, state } = useApp()
   const t = row.tenant
   const colour = participantColor(t.id)
   const devices = deviceRowsFor(allocation, t.id, state.assignments)

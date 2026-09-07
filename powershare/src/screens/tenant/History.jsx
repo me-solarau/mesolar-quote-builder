@@ -4,7 +4,7 @@ import { participantColor, communalColor } from '../../lib/palette.js'
 import { kwh, money, pct } from '../../lib/format.js'
 import { participantDaily } from '../../lib/views.js'
 import { Card, Stat, Delta, Notice } from '../../components/ui/index.jsx'
-import { GroupedBars, BarList } from '../../components/charts/Bars.jsx'
+import { GroupedBars } from '../../components/charts/Bars.jsx'
 import { StackedArea } from '../../components/charts/TimeSeries.jsx'
 
 export default function TenantHistory () {

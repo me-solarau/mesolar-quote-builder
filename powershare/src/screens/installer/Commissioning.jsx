@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react'
 
 import { useApp } from '../../lib/useApp.jsx'
-import { DEVICES, DEVICE_BY_ID, MASTER_ID, AREA_BY_ID, TENANTS } from '../../data/site.js'
-import { loadTypeColor, participantColor, communalColor } from '../../lib/palette.js'
-import { kwh, kw, pct, ago, signedPct } from '../../lib/format.js'
-import { Card, Badge, Icon, Notice, Field, LOAD_ICON, Segmented, Modal } from '../../components/ui/index.jsx'
+import { DEVICES, MASTER_ID, AREA_BY_ID, TENANTS } from '../../data/site.js'
+import { loadTypeColor } from '../../lib/palette.js'
+import { kwh, kw, pct, ago } from '../../lib/format.js'
+import { Card, Badge, Icon, Notice, Field, LOAD_ICON, Modal } from '../../components/ui/index.jsx'
 import { CoverageMeter } from '../../components/charts/Bars.jsx'
+import { liveElectrical } from '../../lib/views.js'
 import { assignmentLabel } from '../owner/Devices.jsx'
 
 /**
@@ -19,6 +20,7 @@ export default function InstallerCommissioning () {
 
   const last = telemetry.hours.length - 1
   const liveMaster = telemetry.series[MASTER_ID].kw[last]
+  const electrical = useMemo(() => liveElectrical(telemetry), [telemetry])
 
   const rows = DEVICES.filter((d) => d.id !== MASTER_ID).map((dv) => {
     const s = telemetry.series[dv.id]
@@ -26,7 +28,7 @@ export default function InstallerCommissioning () {
     let lastSeen = last
     while (lastSeen > 0 && !s.ok[lastSeen]) lastSeen--
     const alloc = allocation.devices.find((d) => d.deviceId === dv.id)
-    return { dv, online, lastSeenMs: telemetry.hours[lastSeen], liveKw: online ? s.kw[last] : null, alloc }
+    return { dv, online, lastSeenMs: Math.min(nowMs, telemetry.hours[lastSeen] + 3600_000), liveKw: online ? s.kw[last] : null, alloc }
   })
 
   const liveMetered = rows.reduce((a, r) => a + (r.liveKw ?? 0), 0)
@@ -80,6 +82,56 @@ export default function InstallerCommissioning () {
         </div>
       </Card>
 
+      <Card title="Phase balance"
+        subtitle={`Live loading of each phase against the ${electrical.supplyRatingA} A supply rating.`}>
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Phase</th>
+                <th className="n">Voltage</th>
+                <th className="n">Current</th>
+                <th className="n">Power</th>
+                <th className="n">Endpoints</th>
+                <th style={{ minWidth: 180 }}>Load vs 50 A rating</th>
+              </tr>
+            </thead>
+            <tbody>
+              {electrical.phases.map((ph) => (
+                <tr key={ph.phase}>
+                  <td style={{ fontWeight: 600 }}>{ph.phase}</td>
+                  <td className="n">{ph.volts.toFixed(1)} V</td>
+                  <td className="n">{ph.amps.toFixed(1)} A</td>
+                  <td className="n">{kw(ph.kw)} kW</td>
+                  <td className="n">{ph.devices}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                      <div style={{ flex: 1 }}>
+                        <CoverageMeter value={ph.amps / electrical.supplyRatingA} threshold={0.8} />
+                      </div>
+                      <span className="num" style={{ minWidth: 42, textAlign: 'right' }}>
+                        {pct(ph.amps / electrical.supplyRatingA, 0)}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Notice icon={electrical.imbalance > 0.5 ? 'alert' : 'info'}
+            tone={electrical.imbalance > 0.5 ? 'warn' : 'neutral'}>
+            Imbalance is {pct(electrical.imbalance, 0)} of the busiest phase. At this
+            demand it does not matter, but the cool-room compressors and both air
+            conditioners are the loads worth watching — one phase can approach the
+            50 A limit while the other two sit idle. Voltage is measured by the
+            Pro 3EM per phase; 1PM endpoints inherit their phase’s voltage, since a
+            relay meter measures its own circuit rather than the supply.
+          </Notice>
+        </div>
+      </Card>
+
       <Card title="Endpoints" subtitle="Assignment and load type are set here at commissioning.">
         <div className="table-wrap">
           <table className="data">
@@ -88,9 +140,12 @@ export default function InstallerCommissioning () {
                 <th>Meter</th>
                 <th>Model</th>
                 <th>Location</th>
+                <th>Phase</th>
                 <th>Assignment</th>
                 <th>State</th>
                 <th className="n">Live</th>
+                <th className="n">Current</th>
+                <th className="n">Headroom</th>
                 <th className="n">Cumulative</th>
               </tr>
             </thead>
@@ -115,6 +170,7 @@ export default function InstallerCommissioning () {
                     </div>
                   </td>
                   <td style={{ color: 'var(--text-muted)' }}>{AREA_BY_ID[r.dv.area]?.name}</td>
+                  <td>{r.dv.phase}</td>
                   <td>{assignmentLabel(state.assignments[r.dv.id] ?? r.dv.assignment).replace(/ \(private\)| — .*/, '')}</td>
                   <td>
                     {r.online
@@ -122,6 +178,16 @@ export default function InstallerCommissioning () {
                       : <Badge tone="bad" icon="wifiOff">{ago(r.lastSeenMs, nowMs)}</Badge>}
                   </td>
                   <td className="n">{r.liveKw == null ? '—' : `${kw(r.liveKw)} kW`}</td>
+                  <td className="n">
+                    {electrical.devices[r.dv.id]?.online
+                      ? `${electrical.devices[r.dv.id].amps.toFixed(2)} A`
+                      : '—'}
+                  </td>
+                  <td className="n" style={{ color: 'var(--text-muted)' }}>
+                    {electrical.devices[r.dv.id]?.online
+                      ? `${pct(electrical.devices[r.dv.id].utilisation, 0)} of ${r.dv.maxAmps} A`
+                      : `${r.dv.maxAmps} A rated`}
+                  </td>
                   <td className="n" style={{ color: 'var(--text-muted)' }}>
                     {kwh(telemetry.series[r.dv.id].cum[last], 1)}
                   </td>
@@ -143,7 +209,48 @@ export default function InstallerCommissioning () {
         </ul>
       </Card>
 
-      {adding && <OnboardModal onClose={() => setAdding(false)} />}
+      {state.addedDevices.length > 0 && (
+        <Card title="Awaiting first reading"
+          subtitle="Onboarded here but not yet reporting cumulative energy. These contribute nothing to any allocation until they do.">
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Meter</th>
+                  <th>Location</th>
+                  <th>Load type</th>
+                  <th>Assignment</th>
+                  <th>Address</th>
+                  <th>Added</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {state.addedDevices.map((dv) => (
+                  <tr key={dv.id}>
+                    <td style={{ fontWeight: 550 }}>{dv.name}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{AREA_BY_ID[dv.area]?.name}</td>
+                    <td>{dv.loadType}</td>
+                    <td>{assignmentLabel(dv.assignment).replace(/ \(private\)| — .*/, '')}</td>
+                    <td style={{ color: 'var(--text-muted)' }}>{dv.ip}</td>
+                    <td><Badge tone="warn" icon="clock">Awaiting reading</Badge></td>
+                    <td>
+                      <button className="btn sm danger"
+                        onClick={() => store.removeDevice(dv.id, session.role)}>Remove</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {adding && (
+        <OnboardModal
+          onClose={() => setAdding(false)}
+          onAdd={(device) => { store.addDevice(device, session.role); setAdding(false) }} />
+      )}
     </div>
   )
 }
@@ -172,25 +279,32 @@ function VerifyRow ({ label, value, note, strong }) {
   )
 }
 
-function OnboardModal ({ onClose }) {
-  const [step, setStep] = useState(1)
-  const [form, setForm] = useState({ ip: '', name: '', area: 'kitchen', loadType: 'gpo', assignment: 'communal' })
+function OnboardModal ({ onClose, onAdd }) {
+  const [form, setForm] = useState({
+    ip: '', name: '', area: 'kitchen', loadType: 'gpo',
+    assignment: 'communal', model: 'Shelly 1PM Gen3'
+  })
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+  const valid = form.name.trim().length > 1 && form.ip.trim().length > 6
 
   return (
     <Modal wide title="Onboard a meter" onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" disabled onClick={onClose}>Add meter</button>
+          <button className="btn primary" disabled={!valid}
+            onClick={() => onAdd({ ...form, name: form.name.trim(), ip: form.ip.trim() })}>
+            Add meter
+          </button>
         </>
       }>
-      <Notice icon="info" title="Not wired up in this build">
-        Device discovery talks to Home Assistant, which is not running behind this
-        demo. The form below is the real onboarding shape — discovery by IP or
-        mDNS, then naming, location, load type and assignment — and
-        <code> docs/home-assistant/</code> has the gateway configuration it would
-        talk to.
+      <Notice icon="info" title="Discovery is not available in this build">
+        Adding a meter here registers the endpoint and its assignment, and logs it
+        to the audit trail. It will show as <strong>awaiting first reading</strong>
+        until cumulative energy arrives — which in production comes from Home
+        Assistant, configured in <code>docs/home-assistant/</code>. An endpoint
+        with no readings contributes nothing to an allocation, so onboarding one
+        mid-period cannot disturb a bill.
       </Notice>
 
       <div className="grid cols-2" style={{ gap: 12, marginTop: 14 }}>
@@ -211,6 +325,14 @@ function OnboardModal ({ onClose }) {
             <option value="light">Lighting</option>
             <option value="ac">Air conditioning</option>
             <option value="cooking">Cooking</option>
+          </select>
+        </Field>
+        <Field label="Model"
+          hint="A circuit over 16 A must be CT-metered — a relay device is not suitable.">
+          <select value={form.model} onChange={(e) => set('model', e.target.value)}>
+            <option>Shelly 1PM Gen3</option>
+            <option>Shelly EM Gen3 + 50 A CT</option>
+            <option>Shelly Pro 3EM 120 A</option>
           </select>
         </Field>
         <Field label="Billed to" hint="Determines whether this endpoint is private or pooled.">

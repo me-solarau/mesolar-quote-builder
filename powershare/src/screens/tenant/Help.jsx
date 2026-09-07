@@ -1,6 +1,5 @@
 import { useApp } from '../../lib/useApp.jsx'
-import { TENANT_BY_ID, TENANTS } from '../../data/site.js'
-import { participantColor, communalColor } from '../../lib/palette.js'
+import { TENANT_BY_ID } from '../../data/site.js'
 import { kwh, money, pct } from '../../lib/format.js'
 import { Card, Notice, Icon } from '../../components/ui/index.jsx'
 
@@ -15,7 +14,6 @@ export default function TenantHelp () {
   const tenant = TENANT_BY_ID[tid]
   const me = allocation.perTenant[tid]
   const rec = allocation.reconciliation
-  const colour = participantColor(tid)
   const isOpen = periodId === currentPeriodId
   const distributable = isOpen ? rec.masterKwh * estimateRate : rec.distributable
 

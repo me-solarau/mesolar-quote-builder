@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 
 import { useApp } from '../../lib/useApp.jsx'
-import { TENANTS, DEVICE_BY_ID, AREA_BY_ID } from '../../data/site.js'
+import { TENANTS, AREA_BY_ID } from '../../data/site.js'
 import { participantColor } from '../../lib/palette.js'
 import { kwh, money, pct, signedPct, date, fullDateTime, duration } from '../../lib/format.js'
 import { Card, Badge, Icon, Segmented, Notice, Empty } from '../../components/ui/index.jsx'
@@ -26,7 +26,6 @@ const ACTION_TONE = {
 }
 
 export default function OwnerReports () {
-  const { allocation, allocations, periods, period, periodId, state, site, splitRule } = useApp()
   const [tab, setTab] = useState('period')
 
   return (
@@ -189,7 +188,7 @@ function PeriodReport () {
 /* ------------------------------------------------------------------ */
 
 function Exceptions () {
-  const { allocations, periods, telemetry, state } = useApp()
+  const { allocations, periods, state } = useApp()
 
   const rows = []
   for (const p of periods) {

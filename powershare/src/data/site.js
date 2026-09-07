@@ -82,6 +82,36 @@ export const LOAD_TYPES = {
 }
 
 /**
+ * Which phase each circuit sits on. Spread deliberately: the two air
+ * conditioners and the stove are the big loads and are kept apart, so no single
+ * phase of the 50 A supply carries them together.
+ */
+const PHASE = {
+  'bed1-gpo': 'L1',
+  'bed1-light': 'L1',
+  'bed2-gpo': 'L2',
+  'bed2-light': 'L2',
+  'armand-gpo': 'L3',
+  'armand-light': 'L3',
+  'armand-ac': 'L3',
+  'computer-gpo': 'L1',
+  'computer-light': 'L1',
+  'kitchen-gpo': 'L2',
+  'kitchen-light': 'L2',
+  'bathroom-gpo': 'L3',
+  'bathroom-light': 'L3',
+  'laundry-gpo': 'L1',
+  'laundry-light': 'L1',
+  'shared-ac': 'L1',
+  stove: 'L2'
+}
+
+export const PHASES = ['L1', 'L2', 'L3']
+
+/** Nominal single-phase supply voltage in AU. */
+export const NOMINAL_VOLTS = 230
+
+/**
  * Every device. `assignment` is what the allocation engine reads:
  *   tenant:<id> — private usage billed direct to that participant
  *   communal    — pooled and split by the communal split rule
@@ -146,6 +176,7 @@ function d (id, name, area, loadType, assignment, model, extra = {}) {
     mac: fakeMac(id),
     ip: fakeIp(id),
     firmware: '1.4.4',
+    phase: PHASE[id] ?? null,
     commissionedAt: '2026-05-09',
     ...extra
   }

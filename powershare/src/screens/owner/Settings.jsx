@@ -3,10 +3,9 @@ import { useState } from 'react'
 import { useApp } from '../../lib/useApp.jsx'
 import { TENANTS, SITE, DEVICES } from '../../data/site.js'
 import { participantColor } from '../../lib/palette.js'
-import { kwh, pct, money } from '../../lib/format.js'
+import { pct } from '../../lib/format.js'
 import { splitShares } from '../../lib/allocation.js'
 import { Card, Field, Notice, Badge, Icon, Modal } from '../../components/ui/index.jsx'
-import { BarList } from '../../components/charts/Bars.jsx'
 
 export default function OwnerSettings () {
   const { state, splitRule, session, store, allocation, site } = useApp()

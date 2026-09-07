@@ -11,7 +11,8 @@ two air conditioners, a CT-metered 32 A stove and a 3-phase 50 A master meter.
 ```
 npm install
 npm run dev      # http://localhost:5173
-npm test         # allocation engine tests
+npm test         # allocation engine + permission tests
+npm run lint     # no-undef and rules-of-hooks — the build does not catch either
 npm run build
 ```
 
@@ -94,12 +95,37 @@ both light and dark themes.
 
 ## Requirements coverage
 
-Functional requirements FR-01 … FR-12 are implemented, along with the tenant and
-owner screen sets and every MVP acceptance criterion in section 8 of the PRD.
-The one thing deliberately left short of the PRD's ambition is cost treatment:
-the MVP shares a single distributable amount, and splitting usage, supply,
-demand and solar credits into separate allocation rules is left to a later
-version, as the PRD itself proposes.
+All twelve functional requirements, both screen sets and every MVP acceptance
+criterion in section 8 are implemented. Four are worth stating precisely,
+because "implemented" means something narrower than it might sound:
+
+- **FR-01 device onboarding.** Adding a meter registers the endpoint, its
+  location, load type and assignment, and logs it to the audit trail. It then
+  shows as *awaiting first reading* and contributes nothing to any allocation
+  until cumulative energy arrives — which is how a real commissioning behaves,
+  and means onboarding mid-period cannot disturb a bill. **Network discovery is
+  not implemented**; that lives in Home Assistant.
+- **FR-02 live monitoring.** Power, voltage, current, per-phase loading, phase
+  imbalance and headroom against each meter's rating. Voltage is measured per
+  phase by the Pro 3EM and inherited by the 1PM endpoints on that phase — a
+  relay meter measures its own circuit, not the supply, so that is what the real
+  integration would report too.
+- **FR-03 energy history.** Today, 7 days, billing period and a custom range,
+  on the tenant Usage screen and the owner dashboard chart. Billing itself is
+  never re-scoped: a statement always covers exactly one billing period.
+- **Acceptance criterion 7 (tenant isolation).** `visibleTo()` in
+  `src/lib/views.js` is the projection, and routing is guarded by role, so no
+  tenant screen or URL reaches another participant's figures. But this build has
+  no backend and no authentication — every participant's numbers are computed in
+  the browser, so the isolation is a UI contract, not a security boundary. In
+  production the same shape is a row-level-security policy and the client never
+  receives the other rows at all.
+
+Deliberately left short of the PRD's ambition: cost treatment. The MVP shares a
+single distributable amount, and splitting usage charges, daily supply charges,
+demand charges and solar credits into separate allocation rules is left to a
+later version, as the PRD itself proposes. The data model already carries the
+invoice total, the supply charge and the distributable amount separately.
 
 ## Taking it to production
 
@@ -110,9 +136,9 @@ PWA. The pieces to build:
 2. **Postgres schema** mirroring the objects in `src/lib/store.js` — sites,
    participants, devices, assignments, readings, billing periods, retailer
    bills, split rules, statements, audit events.
-3. **Row-level security.** `visibleTo` in `src/lib/views.js` is the shape of the
-   policy; a tenant must never be able to read another tenant's rows, and the
-   client must not be what enforces it.
+3. **Row-level security** matching `visibleTo()` in `src/lib/views.js`. A tenant
+   must never be able to read another tenant's rows, and the client must not be
+   what enforces it.
 4. **Auth** — email plus magic link, roles as in the table above.
 5. Swap the telemetry source in `src/lib/useApp.jsx` from `buildTelemetry()` to
    the API. Nothing downstream of it changes.
